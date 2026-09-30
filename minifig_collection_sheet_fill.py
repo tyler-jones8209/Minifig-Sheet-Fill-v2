@@ -10,6 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
 import sys
 import re
 import time
@@ -72,16 +73,19 @@ def is_logged_in(driver):
     driver.get(collection_url)
     time.sleep(3)
 
-    # return True is url contains myCollection and does NOT contain identity.lego.com
+    # return True if url contains myCollection and does NOT contain identity.lego.com
     return "myCollection" in driver.current_url and "identity.lego.com" not in driver.current_url
 
 # function for making the driver
 def make_driver():
 
     # configure driver to use user data directory with login shit idrk
+    # note to self if chrome is crashing just go into task manager and kill any existing chrome tasks
     options = Options()
     options.add_argument(f"--user-data-dir={profile_dir}")
-    options.add_argument("--headless")
+    options.add_argument("--disable-dev-shm-usage") 
+    options.add_argument("--no-sandbox") 
+    options.add_argument("--headless=new") 
     return webdriver.Chrome(options=options)
 
 
@@ -109,12 +113,49 @@ def main():
     my_minifigures_btn = driver.find_element(By.ID, "MPI-nav-myMinifigures")
     driver.execute_script("arguments[0].click();", my_minifigures_btn)
 
-    time.sleep(1)
-    minifigure_item_list = driver.find_elements(By.XPATH, "//*[starts-with(@id, 'listItemView-')]")
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, 'listItemView-0'))
+    )  
 
-    for figure in minifigure_item_list:
-        figure_number = figure.find_element(By.XPATH, "//*[@class='text--small text--center l-margin-top--sm text--break-word l-cursor-pointer']")
-        print(figure_number.text)
+    minifig_collection_soup = BeautifulSoup(driver.page_source, 'html.parser')
+
+    all_listItemViews = minifig_collection_soup.find_all(id=re.compile(r'^listItemView-\d+'))
+
+    zane = minifig_collection_soup.find(id=str('listItemView-0'))
+    zane_name = zane.find(class_="text--bold l-cursor-pointer").text
+    # sheet can display image from url and the formula looks like this:
+    # =IMAGE("img.bricklink.com/ItemImage/MN/0/njo0001.png") need to remove the '\\' at the beginning of the scraped url and add paranthesis
+    zane_image = zane.find(class_="personal-inventory__list-thumb-img").get('src')
+    zane_qty_container = zane.find('div', class_='personal-inventory__list-item-list-cell--qty')
+    if zane_qty_container:
+        input_tag = zane_qty_container.find('input', class_='text-input text--center personal-inventory__list-qty')
+        if input_tag and input_tag.has_attr('value'):
+            zane_quantity = input_tag['value']
+    zane_theme_parent = zane.find(class_="personal-inventory__item-category text--small").text
+    zane_id = zane.find(class_="text--small text--center l-margin-top--sm text--break-word l-cursor-pointer").text
+
+    print(zane_name)
+    print(zane_image)
+    print(zane_quantity)
+    print(zane_theme_parent)
+    print(zane_id)
+
+
+    ### specific info i can get directly from the myCollection page
+    # full name - class="text--bold l-cursor-pointer"
+    # image directory - class="personal-inventory__list-thumb-img"
+    # quantity owned - class="text-input text--center personal-inventory__list-qty"
+    # theme/subtheme - class="personal-inventory__item-category text--small" would need to be seperated
+    # minifigure id - class="text--small text--center l-margin-top--sm text--break-word l-cursor-pointer"
+
+    # for item in all_listItemViews:
+    #     item_id = item.get_attribute_list('id')
+
+    #     list_item = minifig_collection_soup.find(id=str(item_id[0]))
+
+    #     print(list_item)
+
+    #     break
 
     time.sleep(10)
     driver.quit()
