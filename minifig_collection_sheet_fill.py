@@ -125,6 +125,9 @@ def main():
     zane_name = zane.find(class_="text--bold l-cursor-pointer").text
     # sheet can display image from url and the formula looks like this:
     # =IMAGE("img.bricklink.com/ItemImage/MN/0/njo0001.png") need to remove the '\\' at the beginning of the scraped url and add paranthesis
+    # strng = "//img.bricklink.com/ItemImage/MN/0/njo0001.png"
+    # strng = f'"{strng[2::]}"'
+    # basically just this ^^
     zane_image = zane.find(class_="personal-inventory__list-thumb-img").get('src')
     zane_qty_container = zane.find('div', class_='personal-inventory__list-item-list-cell--qty')
     if zane_qty_container:
