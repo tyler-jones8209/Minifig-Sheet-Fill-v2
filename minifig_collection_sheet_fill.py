@@ -25,7 +25,7 @@ import os
 profile_dir = os.path.abspath("C:\\Users\\Tyler Jones\\Projects\\BrickLink\\minifig_sheet_fill_v2\\selenium_profile")
 
 # url to collection page. will redirect to the login page if you haven't signed in recently
-collection_url = "https://www.bricklink.com/v3/myCollection/main.page"
+collection_url = "https://www.bricklink.com/v3/myCollection/main.page?q=&itemType=M&page=1"
 
 # login function. called if -l/--login flag is present. part automatic and part manual entry
 def login():
@@ -85,8 +85,64 @@ def make_driver():
     options.add_argument(f"--user-data-dir={profile_dir}")
     options.add_argument("--disable-dev-shm-usage") 
     options.add_argument("--no-sandbox") 
-    options.add_argument("--headless=new") 
+    #options.add_argument("--headless=new")
+    options.add_argument("--start-maximized")
     return webdriver.Chrome(options=options)
+
+def get_minifigure_info(minifigure):
+
+    # name of minifigure. e.g, Zane - The Golden Weapons or Zane (Jungle Robe) - Tournament of Elements or Clone Captain Vaughn, 501st Legion, 332nd Company (Phase 2) - Helmet with Holes and Togruta Markings, Orange Visor (this one is ridiculous but you get the point)
+    minifigure_name = minifigure.find(class_="text--bold l-cursor-pointer").text
+
+    # minifigure picture used on BrickLink. formatted to automatically work in sheets. e.g., default url = //img.bricklink.com/ItemImage/MN/0/njo0001.png and formatted url = "img.bricklink.com/ItemImage/MN/0/njo0001.png"
+    minifigure_image_url = minifigure.find(class_="personal-inventory__list-thumb-img").get('src')
+    if minifigure_image_url:
+        minifigure_image_url = f'"{minifigure_image_url[2::]}"'
+
+    # quantity of minifigure owned
+    minifigure_qty_container = minifigure.find(class_="personal-inventory__list-item-list-cell--qty")
+    if minifigure_qty_container:
+        input_tag = minifigure_qty_container.find('input', class_='text-input text--center personal-inventory__list-qty')
+        if input_tag and input_tag.has_attr('value'):
+            minifigure_quantity = input_tag['value']
+
+    # condition of minifigure. e.g, New or Used
+    minifigure_condition = minifigure.find(class_="personal-inventory__list-item-list-cell--cond").text
+
+    # theme and subtheme (if applicable) of minifigure. e.g., Theme = NINJAGO and Subtheme = The Golden Weapons or Theme = Super Heroes and Subtheme = The Batman
+    minifigure_theme_container = minifigure.find(class_="personal-inventory__item-category text--small").text
+    if minifigure_theme_container:
+        if ":" in minifigure_theme_container:
+            split_themes = minifigure_theme_container.split(":")
+            minifigure_theme = split_themes[0].strip()
+            minifigure_subtheme = split_themes[1].strip()
+        else:
+            minifigure_theme = minifigure_theme_container.strip()
+            minifigure_subtheme = "None"
+
+    # minifigure id (unique to BrickLink). e.g, njo0001, sw0527a, sh0038
+    minifigure_id = minifigure.find(class_="text--small text--center l-margin-top--sm text--break-word l-cursor-pointer").text
+
+    # any notes i added to the "Add notes" field on the collection page
+    minifigure_notes = minifigure.find('div', class_="personal-inventory__cell--note l-margin-top--sm personal-inventory__note-field").text
+    if minifigure_notes.strip() == "Add notes":
+        minifigure_notes = ""
+    else:
+        minifigure_notes = minifigure_notes[:-4:]
+
+    return minifigure_name, minifigure_image_url, minifigure_quantity, minifigure_condition, minifigure_theme, minifigure_subtheme, minifigure_id, minifigure_notes
+
+def get_year_and_price(driver, minifigure_id):
+
+    # url specifically selects Price Guide section
+    minifigure_catalogue_url = f"https://www.bricklink.com/v2/catalog/catalogitem.page?M={minifigure_id}#T=P"
+
+    driver.get(minifigure_catalogue_url)
+
+    time.sleep(5)
+
+    driver.quit()
+
 
 
 def main():
@@ -109,58 +165,43 @@ def main():
         driver.quit()
         raise SystemExit("Not logged in. Run again with --login.")
 
-    time.sleep(0.5)
-    my_minifigures_btn = driver.find_element(By.ID, "MPI-nav-myMinifigures")
-    driver.execute_script("arguments[0].click();", my_minifigures_btn)
+    # time.sleep(0.5)
+    # my_minifigures_btn = driver.find_element(By.ID, "MPI-nav-myMinifigures")
+    # driver.execute_script("arguments[0].click();", my_minifigures_btn)
 
     WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.ID, 'listItemView-0'))
-    )  
+    )
 
+    time.sleep(0.5)
+
+    # source all html for the minifigure collection page
     minifig_collection_soup = BeautifulSoup(driver.page_source, 'html.parser')
 
+    # source all minifigure list items 
     all_listItemViews = minifig_collection_soup.find_all(id=re.compile(r'^listItemView-\d+'))
 
-    zane = minifig_collection_soup.find(id=str('listItemView-0'))
-    zane_name = zane.find(class_="text--bold l-cursor-pointer").text
-    # sheet can display image from url and the formula looks like this:
-    # =IMAGE("img.bricklink.com/ItemImage/MN/0/njo0001.png") need to remove the '\\' at the beginning of the scraped url and add paranthesis
-    # strng = "//img.bricklink.com/ItemImage/MN/0/njo0001.png"
-    # strng = f'"{strng[2::]}"'
-    # basically just this ^^
-    zane_image = zane.find(class_="personal-inventory__list-thumb-img").get('src')
-    zane_qty_container = zane.find('div', class_='personal-inventory__list-item-list-cell--qty')
-    if zane_qty_container:
-        input_tag = zane_qty_container.find('input', class_='text-input text--center personal-inventory__list-qty')
-        if input_tag and input_tag.has_attr('value'):
-            zane_quantity = input_tag['value']
-    zane_theme_parent = zane.find(class_="personal-inventory__item-category text--small").text
-    zane_id = zane.find(class_="text--small text--center l-margin-top--sm text--break-word l-cursor-pointer").text
+    # retrieve basic minifigure information available directly from the minifigure collection page as well as price and year released from the minifigure specific catalogue page
+    for minifigure in all_listItemViews:
+        list_item_id = minifigure.get_attribute_list('id')
 
-    print(zane_name)
-    print(zane_image)
-    print(zane_quantity)
-    print(zane_theme_parent)
-    print(zane_id)
+        minifigure = minifig_collection_soup.find(id=str(list_item_id[0]))
 
+        minifigure_name, minifigure_image_url, minifigure_quantity, minifigure_condition, minifigure_theme, minifigure_subtheme, minifigure_id, minifigure_notes = get_minifigure_info(minifigure=minifigure)
+        minifigure_release_year, minifigure_avg_sell_price = get_year_and_price(driver=driver, minifigure_id=minifigure_id)
 
-    ### specific info i can get directly from the myCollection page
-    # full name - class="text--bold l-cursor-pointer"
-    # image directory - class="personal-inventory__list-thumb-img"
-    # quantity owned - class="text-input text--center personal-inventory__list-qty"
-    # theme/subtheme - class="personal-inventory__item-category text--small" would need to be seperated
-    # minifigure id - class="text--small text--center l-margin-top--sm text--break-word l-cursor-pointer"
+        # print(minifigure_name)
+        # print(minifigure_image_url)
+        # print(minifigure_theme)
+        # print(minifigure_subtheme)
+        # print(minifigure_condition)
+        # print(minifigure_quantity)
+        # print(minifigure_id)
+        # print(minifigure_notes)
 
-    # for item in all_listItemViews:
-    #     item_id = item.get_attribute_list('id')
+        break
 
-    #     list_item = minifig_collection_soup.find(id=str(item_id[0]))
-
-    #     print(list_item)
-
-    #     break
-
-    time.sleep(10)
+    time.sleep(3)
     driver.quit()
 
 main()
