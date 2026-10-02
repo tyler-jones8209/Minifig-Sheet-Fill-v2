@@ -1,7 +1,6 @@
 ### 
-# OKAY SO it works sort of but two things:
-# 1: when i push to the google sheet, every subsequent row after the first is one index too far to the right (cumulative)
-# 2: some strings when pushed to the sheet like the image url, release year, and quantity have this annoying "'" at the beginning of the string which completely nukes the image function so gotta figure that out
+# OKAY SO it works sort of but one thing:
+# some strings when pushed to the sheet like the image url, release year, and quantity have this annoying "'" at the beginning of the string which completely nukes the image function so gotta figure that out
 ###
 
 # html parsing and browser surfing
@@ -74,7 +73,7 @@ def is_logged_in(driver):
 
     # open My Collection page (or login page if not logged in)
     driver.get(collection_url)
-    time.sleep(3)
+    time.sleep(2)
 
     # return True if url contains myCollection and does NOT contain identity.lego.com
     return "myCollection" in driver.current_url and "identity.lego.com" not in driver.current_url
@@ -168,7 +167,7 @@ def get_minifigure_info(driver):
         if minifigure_qty_container:
             input_tag = minifigure_qty_container.find('input', class_='text-input text--center personal-inventory__list-qty')
             if input_tag and input_tag.has_attr('value'):
-                minifigure_quantity = input_tag['value']
+                minifigure_quantity = input_tag['value'].strip()
 
         # condition of minifigure. e.g, New or Used
         minifigure_condition = minifigure.find(class_="personal-inventory__list-item-list-cell--cond").text
@@ -215,8 +214,8 @@ def fill_google_sheet(minifig_info):
     # NOTE TO SELF when you add a new sheet you have to go into the sheet, hit share, and add your service access account as editor
     sheet = client.open("Minifigure Collection v2").sheet1
 
-    # clear all cells from A2:I1000 (skipping the header row A1:I1)
-    range_to_clear = "A2:I1000"
+    # clear all cells from A2:J1000 (skipping the header row A1:J1)
+    range_to_clear = "A2:J1000"
     sheet.batch_clear([range_to_clear])
 
     # row 1 is header row; start at row 2
@@ -224,7 +223,7 @@ def fill_google_sheet(minifig_info):
 
     # create cell range from start row and end row (number of items in minifig_info list)
     # this basically turns the range of cells into a 1-dimensional list
-    cell_range = f'A{start_row}:I{start_row + len(minifig_info) - 1}'
+    cell_range = f'A{start_row}:J{start_row + len(minifig_info) - 1}'
     cell_list = sheet.range(cell_range)
 
     # similar to cell_list, this flattens all of the 2-dimensional minifig data into a 1-dimensional list 
@@ -238,8 +237,9 @@ def fill_google_sheet(minifig_info):
     for i, cell in enumerate(cell_list):
         cell.value = flat_data[i]
 
-    # push cells into sheet
-    sheet.update_cells(cell_list)
+    # fix cell type issue
+    sheet.update_cells(cell_list, value_input_option="USER_ENTERED")
+
 
 def main():
 
@@ -269,14 +269,14 @@ def main():
         EC.presence_of_element_located((By.ID, 'listItemView-0'))
     )
 
-    time.sleep(0.5)
+    time.sleep(0.15)
 
     full_minifigure_list = get_minifigure_info(driver=driver)
 
     driver.quit()
 
-    for minifigure in full_minifigure_list:
-        print(minifigure)
+    # for minifigure in full_minifigure_list:
+    #     print(minifigure)
 
     fill_google_sheet(full_minifigure_list)
 
